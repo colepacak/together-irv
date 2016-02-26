@@ -10,10 +10,14 @@ Array.prototype.deepRemove = function(values) {
 class InstantRunoffVote {
   constructor(voteList) {
     // currently the thought is to use this as a global that gets changed as the rounds continue
-    this.voteList = voteList;
+    this.masterVoteList = voteList;
     // ultimately building a results array of objects. each object consists of that round's votes and a loser
-    this.results = [];
+    this.roundList = [];
     this.winnerList = [];
+  }
+
+  hasWinner() {
+    return !!(this.winnerList.length);
   }
 
   // takes an array of votes for a specific round
@@ -52,7 +56,7 @@ class InstantRunoffVote {
 
   // takes an object, with candidate keys and count values
   getLowestCount(obj) {
-    let lowestCount = this.voteList.length;
+    let lowestCount = this.masterVoteList.length;
     for (var key in obj) {
       let count = obj[key];
       if (count < lowestCount) {
@@ -79,20 +83,27 @@ class InstantRunoffVote {
     }
   }
 
+  // return value needs to be a list plus a hasLoser flag
   static recursiveTiebreaker(loserCandidates, voteList) {
+    let result = {
+      hasLoser: false,
+      list: []
+    };
     // first check is whether the list has been exhausted, thus an unbroken tie
     let sortedCounts = getSortedValues(loserCandidates);
     if (listHasExhausted(sortedCounts)) {
       // TODO: determine return value for ties that can't be broken
-      console.log('No loser determined due to unbroken tie');
-      return [];
+      return result;
     }
 
     // next, check for broken tie
     if (tieIsBroken(sortedCounts)) {
       // get all losers with lowest count
       let lowestCount = sortedCounts[0];
-      return getLoserByCount(loserCandidates, lowestCount);
+
+      result.hasLoser = true;
+      result.list = getLoserByCount(loserCandidates, lowestCount);
+      return result
     }
 
     // tie remains. as a result, look to the next set of votes to break tie
@@ -159,37 +170,43 @@ class InstantRunoffVote {
   // build overall results, which consist of round data
   getResults() {
     // start with original votes
-    return buildRound.call(this, this.voteList);
+    return buildRound.call(this, this.masterVoteList);
 
     // takes an array of arrays
     function buildRound(list) {
       var round = {
-        list: [],
+        voteList: [],
         loserList: []
       };
 
       // load round list
-      round.list = list.map(vote => vote[0] );
+      round.voteList = list.map(vote => vote[0] );
 
       // check for item with majority
-      var majorityCheck = InstantRunoffVote.checkForMajority(round.list);
+      var majorityCheck = InstantRunoffVote.checkForMajority(round.voteList);
       if (majorityCheck.majorityExists) {
-        this.results.push(round);
+        this.roundList.push(round);
         return this.winnerList.push(majorityCheck.winner);
       }
 
       // get loser candidates for current round
-      let loserCandidates = this.getLoserCandidates(round.list);
+      let loserCandidates = this.getLoserCandidates(round.voteList);
       // determine ultimate loser from this round. resolve ties by looking at sets of lower ranked votes
-      round.loserList = InstantRunoffVote.findLoser(loserCandidates, this.voteList);
+      // TODO: the return value of findLoser needs to specify if a tie could not be found, thus halt the rounds
+      let loserResult = InstantRunoffVote.findLoser(loserCandidates, this.masterVoteList);
+      round.loserList = loserResult.list;
 
-      // at this time, a loser has been declared
-      // push round to results
-      this.results.push(round);
-      // filter out loser from overall votelist so subsequent votes can matriculate
-      this.voteList = list.deepRemove(round.loserList);
+      this.roundList.push(round);
 
-      return buildRound.call(this, this.voteList);
+      // halt if loser tie-breaker goes unbroken
+      if (!loserResult.hasLoser) {
+        return;
+      }
+
+      // filter out loser from masterVotelist so subsequent votes can matriculate
+      this.masterVoteList = list.deepRemove(round.loserList);
+
+      return buildRound.call(this, this.masterVoteList);
     }
   }
 }

@@ -16,6 +16,7 @@ var voteList2 = [
   ['FH', 'TD']
 ];
 
+// no winner
 var voteList3 = [
   ['HB', 'TD'],
   ['HB', 'TD'],
@@ -23,7 +24,14 @@ var voteList3 = [
   ['TD', 'HB']
 ];
 
-let vote = new InstantRunoffVote(voteList2);
+// winner 'HB' - solved
+var voteList4 = [
+  ['HB', 'TD'],
+  ['HB', 'TD'],
+  ['TD', 'HB']
+];
+
+let vote = new InstantRunoffVote(voteList3);
 vote.getResults();
 
 console.log('the winners are:');
