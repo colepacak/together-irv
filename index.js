@@ -1,39 +1,16 @@
 var InstantRunoffVote = require('./InstantRunoffVote.js');
+var voteList1 = require('./data/voteList1.js');
+var voteList2 = require('./data/voteList2.js');
+var voteList3 = require('./data/voteList3.js');
+var voteList4 = require('./data/voteList4.js');
 
-// winner 'TD' - solved
-var voteList1 = [
-  ['HB', 'TD', 'FH'],
-  ['TD', 'FH', 'HB'],
-  ['HB', 'TD'],
-  ['FH', 'TD']
-];
-
-// winner 'FH' - solved
-var voteList2 = [
-  ['HB', 'TD', 'FH'],
-  ['TD', 'FH', 'HB'],
-  ['HB', 'FH'],
-  ['FH', 'TD']
-];
-
-// no winner
-var voteList3 = [
-  ['HB', 'TD'],
-  ['HB', 'TD'],
-  ['TD', 'HB'],
-  ['TD', 'HB']
-];
-
-// winner 'HB' - solved
-var voteList4 = [
-  ['HB', 'TD'],
-  ['HB', 'TD'],
-  ['TD', 'HB']
-];
-
-let vote = new InstantRunoffVote(voteList3);
-vote.getResults();
+let vote = new InstantRunoffVote(voteList1);
+vote.setResults();
 
 console.log('the winners are:');
-console.log(vote.winnerList);
+console.log(vote.winners);
 console.log("\n");
+
+// notes from chatting with mf:
+// when determining loser, don't look ahead at all votes for tie-breaker, just look ahead to next ranked votes for people who voted for loser candidate
+// do some sort of arbitrary tie breaker function
