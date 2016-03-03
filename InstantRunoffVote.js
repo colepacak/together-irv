@@ -1,10 +1,20 @@
 var _ = require('lodash');
 var filter = require('filter-values');
 
-Array.prototype.deepRemove = function(values) {
+Array.prototype.deepRemove = function(value) {
   return this.map(childArray => {
-    return childArray.filter(item => !_.includes(values, item));
+    return childArray.filter(item => item !== value);
   });
+};
+
+Array.prototype.deepFilterAdvance = function(filterVals) {
+  return this
+    .filter(childArray => {
+      return _.includes(filterVals, childArray[0]);
+    })
+    .map(childArray => {
+      return childArray.slice(1);
+    });
 };
 
 Array.prototype.getTally = function() {
@@ -36,8 +46,8 @@ class InstantRunoffVote {
   checkForMajority(round) {
     var result = { majorityExists: false, winner: null };
 
-    for (let i = 0; i < round.votes.length; i++) {
-      let obj = round.votes[i];
+    for (let i = 0; i < round.tally.length; i++) {
+      let obj = round.tally[i];
       var percentage = obj.count / round.count;
 
       if (percentage > 0.5) {
@@ -49,77 +59,55 @@ class InstantRunoffVote {
     return result;
   }
 
-  // takes an array
-  // returns an object, keyed by candidates, values are their counts
-  static getCounts(list) {
-    return _.countBy(list, _.identity);
-  }
-
   // takes array
   // returns an object: losers who have the lowest count, along with their counts
-  getLoserCandidates(tally) {
+  getLoserCandidatesTally(tally) {
     let lowestCount = tally[0].count;
     return tally.filter(t => t.count === lowestCount);
-  }
-
-  // takes an object, with candidate keys and count values
-  getLowestCount(obj) {
-    let lowestCount = this.votes.length;
-    for (var key in obj) {
-      let count = obj[key];
-      if (count < lowestCount) {
-        lowestCount = count;
-      }
-    }
-    return lowestCount;
   }
 
   // if there is more than one loser candidate, check subsequent sets of votes
   // takes object: keyed by loser candidates, with counts as values
   // voteList is the master list to consult from current round on
-  findLoser(loserCandidates, votes) {
+  findLoser(tally, votes) {
     // determine if there is a single loser from current round
-    if (loserCandidates.length === 1) {
-      return loserCandidates[0];
+    if (tally.length === 1) {
+      return tally[0];
     }
 
     // a single loser cannot be determined from current round
-    return this.recursiveTiebreaker(loserCandidates, votes);
+    let loserCandidates = tally.map(item => item.name );
+    /**
+     * loser candidates stay the same
+     * tally is reconfigured
+     * votes are reconfigured
+     */
+    return this.recursiveTiebreaker(loserCandidates, tally, votes);
   }
 
-  recursiveTiebreaker(loserCandidates, votes) {
+  recursiveTiebreaker(loserCandidates, tally, votes) {
     // first check is whether the list has been exhausted, thus an unbroken tie
-    if (listHasExhausted(loserCandidates)) {
+    if (listHasExhausted(tally)) {
       // TODO: determine return value for ties that can't be broken
       return;
     }
 
-    // next, check for broken tie
-    if (tieIsBroken(loserCandidates)) {
-      // get all losers with lowest count
-      return loserCandidates[0];
+    if (tieIsBroken(tally)) {
+      // get loser with lowest count
+      return tally[0];
     }
 
     // tie remains. as a result, look to the next set of votes to break tie
     // filtered by loser candidates
-    let filteredVotes = deepFilter(votes, loserCandidates);
+    let updatedVotes = votes.deepFilterAdvance(loserCandidates);
 
-    // get counts for filteredVotes and update losers candidates
-    let nextRoundList = filteredVotes
-      .map(vote => {
-        return vote[0];
-      })
+    let updatedTally = updatedVotes
+      .getTally()
       .filter(item => {
-        return typeof item !== 'undefined';
+        return _.includes(loserCandidates, item.name)
       });
 
-    // update loserCandidates with new counts
-    let updatedLoserCandidates = {};
-    for (var candidate in loserCandidates) {
-      updatedLoserCandidates[candidate] = getCount(nextRoundList, candidate);
-    }
-
-    return this.recursiveTiebreaker(updatedLoserCandidates, filteredVotes);
+    return this.recursiveTiebreaker(loserCandidates, updatedTally, updatedVotes);
 
 
     function listHasExhausted(array) {
@@ -128,26 +116,6 @@ class InstantRunoffVote {
 
     function tieIsBroken(sortedArray) {
       return !!(sortedArray[0].count !== sortedArray[1].count);
-    }
-
-    function deepFilter(array, loserCandidates) {
-      return array.map(childArray => {
-        return childArray
-          .slice(1)
-          .filter(item => {
-            return _.includes(Object.keys(loserCandidates), item);
-          });
-      });
-    }
-
-    function getCount(collection, candidate) {
-      let count = 0;
-      collection.forEach(item => {
-        if (item === candidate) {
-          count++;
-        }
-      });
-      return count;
     }
   }
 
@@ -158,13 +126,13 @@ class InstantRunoffVote {
    */
   setResults(votes = this.votes) {
     var round = {
-      votes: [],
+      tally: [],
       loser: null,
       count: null
     };
 
-    round.votes = votes.getTally();
-    round.count = round.votes.reduce((reduction, currentValue) => {
+    round.tally = votes.getTally();
+    round.count = round.tally.reduce((reduction, currentValue) => {
       return reduction + currentValue.count;
     }, 0);
 
@@ -176,13 +144,13 @@ class InstantRunoffVote {
     }
 
     // get loser candidates for current round
-    let loserCandidates = this.getLoserCandidates(round.votes);
+    let loserCandidatesTally = this.getLoserCandidatesTally(round.tally);
     // determine ultimate loser from this round. resolve ties by looking at sets of lower ranked votes
-    round.loser = this.findLoser(loserCandidates, votes);
+    round.loser = this.findLoser(loserCandidatesTally, votes);
 
     this.rounds.push(round);
 
-    let filteredVotes = votes.deepRemove(round.losers);
+    let filteredVotes = votes.deepRemove(round.loser);
 
     return this.setResults(filteredVotes);
   }
