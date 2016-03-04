@@ -9,6 +9,8 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "expect": "^1.14.0",
+    "expect.js": "^0.3.1",
     "filter-object": "^2.1.0",
     "filter-values": "^0.4.0",
     "lodash": "^4.5.0",
