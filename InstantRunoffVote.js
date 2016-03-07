@@ -7,8 +7,9 @@ require('./utils/Array.prototype.getTally.js');
 var getRandomInt = require('./utils/getRandomInt.js');
 
 class InstantRunoffVote {
-  constructor(voteList) {
+  constructor(voteList, candidates) {
     this.votes = voteList;
+    this.candidates = candidates;
     this.rounds = [];
     this.winner = null;
   }
@@ -33,8 +34,24 @@ class InstantRunoffVote {
     return result;
   }
 
+  /**
+   * Get the candidates with the lowest counts for a particular round.
+   * Filter out candidates that have been losers in previous rounds.
+   * @param tally - sorted by the length of count array
+   * @returns {*}
+   */
   getLoserCandidatesTally(tally) {
-    let lowestCount = tally[0].count;
+    let previousLosers = this.rounds.map(r => { return r.loser });
+    let lowestCount;
+
+    for (let i = 0; i < tally.length; i++) {
+      let candidate = tally[i];
+      if (!_.includes(previousLosers, candidate.name)) {
+        lowestCount = candidate.count;
+        break;
+      }
+    }
+
     return tally.filter(t => t.count === lowestCount);
   }
 
@@ -44,7 +61,7 @@ class InstantRunoffVote {
   findLoser(tally, votes) {
     // Determine if there is a single loser from current round
     if (tally.length === 1) {
-      return tally[0];
+      return tally[0].name;
     }
 
     let loserCandidates = this.getLoserCandidates(tally);
@@ -63,14 +80,13 @@ class InstantRunoffVote {
   recursiveTiebreaker(loserCandidates, tally, votes) {
     // First, check is whether the list has been exhausted, thus an unbroken tie
     if (listHasExhausted(tally)) {
-      // TODO: determine return value for ties that can't be broken
       let random = getRandomInt(0, loserCandidates.length - 1);
       return loserCandidates[random];
     }
 
     if (tieIsBroken(tally)) {
       // Get loser with lowest count
-      return loserCandidates[0];
+      return tally[0].name;
     }
 
     // Tie remains - as a result, look to the next set of votes to break tie filtered by loser candidates
@@ -94,6 +110,31 @@ class InstantRunoffVote {
     }
   }
 
+  getRoundVotes(votes, candidates) {
+    let tally = votes.reduce((reduction, currentValue, currentIndex) => {
+      let match = reduction.find(o => { return o.name === currentValue[0] });
+      if (match) {
+        match.count.push(currentIndex);
+      } else {
+        reduction.push({ name: currentValue[0], count: [currentIndex] });
+      }
+      return reduction;
+    }, []);
+
+    if (candidates) {
+      candidates.forEach(r => {
+        let isIncluded = tally.find(t => {
+          return t.name === r;
+        });
+
+        if (!isIncluded) {
+          tally.push({ name: r, count: [] });
+        }
+      });
+    }
+    return _.sortBy(tally, 'count.length');
+  }
+
   /**
    * Build overall results, which consist of round data
    * @param votes: an array of arrays
@@ -101,12 +142,14 @@ class InstantRunoffVote {
   setResults(votes = this.votes) {
     var round = {
       tally: [],
+      votes: [],
       count: null,
       loserCandidates: [],
       loser: null
     };
 
-    round.tally = votes.getTally();
+    round.tally = votes.getTally(this.candidates);
+    round.votes = this.getRoundVotes(votes, this.candidates);
     round.count = round.tally.reduce((reduction, currentValue) => {
       return reduction + currentValue.count;
     }, 0);
